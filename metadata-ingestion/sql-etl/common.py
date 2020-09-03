@@ -93,15 +93,20 @@ def produce_dataset_mce(mce, kafka_config, producer):
     producer.produce(topic=kafka_config.kafka_topic, key=mce['proposedSnapshot'][1]['urn'], value=mce)
 
 
-def run(url, options, platform, schema_blacklist = None, kafka_config = KafkaConfig()):
+def run(url, options, platform, extra_kafka_conf = None, schema_blacklist = None, kafka_config = KafkaConfig()):
+    extra_kafka_conf = extra_kafka_conf or {}
     schema_blacklist = schema_blacklist or []
 
     engine = create_engine(url, **options)
 
-    # avro producer
-    conf = {'bootstrap.servers': kafka_config.bootstrap_server,
-            'on_delivery': delivery_report,
-            'schema.registry.url': kafka_config.schema_registry}
+    # Avro producer kafka configs
+    conf = {
+      'bootstrap.servers': kafka_config.bootstrap_server,
+      'on_delivery': delivery_report,
+      'schema.registry.url': kafka_config.schema_registry,
+      **extra_kafka_conf
+    }
+
     key_schema = avro.loads('{"type": "string"}')
     record_schema = avro.load(kafka_config.avsc_path)
     producer = AvroProducer(conf, default_key_schema=key_schema, default_value_schema=record_schema)
