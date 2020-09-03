@@ -63,7 +63,7 @@ def build_dataset_mce(platform, dataset_name, columns):
         "created": { "time": sys_time, "actor": actor },
         "lastModified": { "time":sys_time, "actor": actor },
         "hash": "",
-        "platformSchema": { "tableSchema": "" },
+        "platformSchema": { "tableSchema": "Table DDL goes here" },
         "fields": fields
     }
 
@@ -86,26 +86,40 @@ def delivery_report(err, msg):
         print('Message delivered to {} [{}]'.format(msg.topic(), msg.partition()))
 
 
-def produce_dataset_mce(mce, kafka_config):
+def produce_dataset_mce(mce, kafka_config, producer):
     """
     Produces a MetadataChangeEvent to Kafka
     """
-    conf = {'bootstrap.servers': kafka_config.bootstrap_server,
-            'on_delivery': delivery_report,
-            'schema.registry.url': kafka_config.schema_registry}
+    producer.produce(topic=kafka_config.kafka_topic, key=mce['proposedSnapshot'][1]['urn'], value=mce)
+
+
+def run(url, options, platform, extra_kafka_conf = None, schema_blacklist = None, kafka_config = KafkaConfig()):
+    extra_kafka_conf = extra_kafka_conf or {}
+    schema_blacklist = schema_blacklist or []
+
+    engine = create_engine(url, **options)
+
+    # Avro producer kafka configs
+    conf = {
+      'bootstrap.servers': kafka_config.bootstrap_server,
+      'on_delivery': delivery_report,
+      'schema.registry.url': kafka_config.schema_registry,
+      **extra_kafka_conf
+    }
+
     key_schema = avro.loads('{"type": "string"}')
     record_schema = avro.load(kafka_config.avsc_path)
     producer = AvroProducer(conf, default_key_schema=key_schema, default_value_schema=record_schema)
 
-    producer.produce(topic=kafka_config.kafka_topic, key=mce['proposedSnapshot'][1]['urn'], value=mce)
-    producer.flush()
-
-
-def run(url, options, platform, kafka_config = KafkaConfig()):
-    engine = create_engine(url, **options)
     inspector = reflection.Inspector.from_engine(engine)
     for schema in inspector.get_schema_names():
+        if schema in schema_blacklist:
+            continue
+
         for table in inspector.get_table_names(schema):
+            print(f"Producing data for table: {schema}.{table}")
             columns = inspector.get_columns(table, schema)
             mce = build_dataset_mce(platform, f'{schema}.{table}', columns)
-            produce_dataset_mce(mce, kafka_config)
+            produce_dataset_mce(mce, kafka_config, producer)
+
+        producer.flush()
