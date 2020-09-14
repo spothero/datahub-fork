@@ -61,6 +61,7 @@ def file_contents_to_pipegen_spec(file_obj):
 
 def construct_data_urn(pipegen_spec):
 	if pipegen_spec.source in ("Presto", "PrestoToRedshift"):
+		# pipegen stores metadata in hive_emr not glue
 		platform = "presto_hive"
 		table_name = f"pipegen.{pipegen_spec.target_table_name}"
 
@@ -85,7 +86,7 @@ def construct_datalineage_urn(data_dependency):
 		elif catalog == "hive_emr":
 			platform = "presto_hive"
 		else:
-			raise Exception(f"Unknown catalog: {catalog}")
+			raise Exception(f"Unknown catalog: {catalog} for data_dependency: {data_dependency.table}")
 
 		table_name = ".".join(parts[1::])
 
