@@ -37,7 +37,7 @@ class PipegenSpec:
 	description: str 
 	target_table_name: str
 	data_dependencies:  typing.List[DataDependency]
-	source: str #TODO: handle prestotoredshift
+	source: str
 	enabled_for_scheduling: bool
 
 
