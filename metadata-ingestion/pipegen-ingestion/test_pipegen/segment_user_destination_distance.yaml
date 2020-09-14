@@ -1,0 +1,55 @@
+---
+Name: segment_user_destination_distance
+Description: |
+  This pipeline calculates the distance between a user's location and the map center at the max timestamp of each session
+TargetTableName: pg_segment_user_destination_distance
+DataDependencies:
+- {"datasource": "presto", "table": "hive_emr.pipegen.pg_segment_tracks"}
+- {"datasource": "presto", "table": "hive.segment.tracks"}
+- {"datasource": "presto", "table": "hive.segment_processed.user_location_neighborhoods"}
+- {"datasource": "presto", "table": "hive.segment_processed.search_event_neighborhoods"}
+Query:  |
+  WITH max_distance as 
+  (
+  SELECT
+  segment_tracks_presto.global_session_id,
+  segment_tracks_presto.id,
+  distance.neighborhood,
+  distance.city,
+  distance.distance,
+  segment_tracks_presto.timestamp as timestamp,
+    first_value(distance.distance) OVER (PARTITION by segment_tracks_presto.global_session_id ORDER BY segment_tracks_presto.timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as first_distance,
+  last_value(distance.distance) OVER (PARTITION by segment_tracks_presto.global_session_id ORDER BY segment_tracks_presto.timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as last_distance
+  FROM hive_emr.pipegen.pg_segment_tracks segment_tracks_presto
+  INNER JOIN (SELECT
+  tracks.search_id,
+  tracks.message_id,
+  tracks.timestamp,
+  n.name as neighborhood,
+  n.city as city,
+  ((ACOS(SIN(RADIANS(n.user_location_latitude)) * SIN(RADIANS(s.latitude)) + COS(RADIANS(n.user_location_latitude)) * COS(RADIANS(s.latitude)) * COS(RADIANS(s.longitude - n.user_location_longitude))) *  6371) / 1.60934) as distance
+  FROM hive.segment.tracks as tracks 
+    INNER JOIN hive.segment_processed.user_location_neighborhoods n on tracks.search_id = n.search_id
+    INNER JOIN hive.segment_processed.search_event_neighborhoods s on tracks.search_id = s.search_id
+    WHERE tracks.dateid >= 20190601 and (n.user_location_latitude <> 0 and n.user_location_longitude <> 0)) as distance 
+      on segment_tracks_presto.id = distance.message_id
+    WHERE distance.distance IS NOT NULL and distance.distance = distance.distance)
+  SELECT
+  *
+  FROM
+  (SELECT
+  global_session_id,
+  id,
+  neighborhood,
+  city,
+  distance,
+  CASE 
+    WHEN first_distance = last_distance THEN 'not moving'
+    ELSE 'moving'
+  END AS is_moving,
+  ROW_NUMBER() OVER (PARTITION BY global_session_id ORDER BY timestamp DESC) as row_distance
+  FROM max_distance)
+  WHERE row_distance = 1
+Frequency: '0 2 * * *'
+Source: Presto
+Email: jimmy@spothero.com
