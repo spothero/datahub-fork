@@ -1,0 +1,34 @@
+Name: event_facilities_summarized
+Description: This table provides a summarized view of events in the next 3 days and surrounding facilities; intended for use in search.
+TargetTableName: pg_event_facilities_summarized
+SchedulingDependencies:
+  - Source: Redshift
+    Name: pg_parent_event
+DataDependencies:
+  - Source: Redshift
+    Name: sh_public.event
+  - Source: Redshift
+    Name: pipegen.pg_destination_microclimate
+  - Source: Redshift 
+    Name: pipegen.pg_parent_destination
+Query: |
+  SELECT
+    DISTINCT
+    parent_event.parent_event_id
+    ,destination_microclimate.parking_spot_id
+    ,destination_microclimate.distance_miles
+    ,DATE_TRUNC('hour',DATEADD(second,CAST(-1*event_starts_offset AS INT),starts)) starts_offset
+    ,DATE_TRUNC('hour',DATEADD(second,CAST(-1*event_ends_offset AS INT),ends)) ends_offset
+    ,destination_microclimate.parking_spot_id||'.'||starts_offset||ends_offset facility_time_key
+  FROM pipegen.pg_parent_event parent_event
+  INNER JOIN (
+    SELECT * 
+    FROM sh_public.event event
+    WHERE event.starts >= GETDATE() AND event.starts < DATEADD(day,3,GETDATE())
+  ) event ON event.event_id = parent_event.parent_event_id
+  LEFT JOIN pipegen.pg_parent_destination parent_destination ON event.destination_id = parent_destination.sh_destination_id
+  INNER JOIN pipegen.pg_destination_microclimate destination_microclimate ON destination_microclimate.destination_id = parent_destination.parent_destination_id AND destination_microclimate.parking_spot_id IS NOT NULL
+Frequency: '00 01,16 * * *'
+Source: Redshift
+Email: analysts@spothero.com
+EnabledForScheduling: True
