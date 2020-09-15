@@ -26,9 +26,9 @@ EXTRA_KAFKA_CONF = {
 }
 
 
-@dataclass
-class DataDependency:
-	datasource: str 
+@dataclass(frozen=True)
+class Dependency:
+	source: str 
 	table: str
 
 @dataclass
@@ -36,9 +36,15 @@ class PipegenSpec:
 	name: str
 	description: str 
 	target_table_name: str
-	data_dependencies:  typing.List[DataDependency]
+	data_dependencies:  typing.List[Dependency]
+	scheduling_dependencies: typing.List[Dependency]
 	source: str
 	enabled_for_scheduling: bool
+
+	def all_data_dependencies(self):
+		return set(self.data_dependencies).union(
+			set(self.scheduling_dependencies)
+		)
 
 
 def file_to_pipegen_spec(file_name):
@@ -47,13 +53,17 @@ def file_to_pipegen_spec(file_name):
 
 def file_contents_to_pipegen_spec(file_obj):
 	data_dependencies = file_obj.get("DataDependencies", [])
-	mapped_data_dependencies = [ DataDependency(d["datasource"], d["table"]) for d in data_dependencies]
+	scheduling_dependencies = file_obj.get("SchedulingDependencies", [])
+
+	mapped_data_dependencies = [ Dependency(d["Source"], d["Name"]) for d in data_dependencies]
+	mapped_scheduling_dependencies = [ Dependency(d["Source"], f"pipegen.{d['Name']}") for d in scheduling_dependencies]
 
 	return PipegenSpec(
 		name = file_obj["Name"],
 		description = file_obj["Description"],
 		target_table_name = file_obj["TargetTableName"],
 		data_dependencies = mapped_data_dependencies,
+		scheduling_dependencies = mapped_scheduling_dependencies,
 		source = file_obj["Source"],
 		enabled_for_scheduling = file_obj.get("EnabledForScheduling", True)
 	)
@@ -77,7 +87,7 @@ def construct_data_urn(pipegen_spec):
 
 
 def construct_datalineage_urn(data_dependency):
-	if data_dependency.datasource == "presto":
+	if data_dependency.source == "Presto":
 		parts = data_dependency.table.split(".")
 		catalog = parts[0]
 
@@ -90,12 +100,12 @@ def construct_datalineage_urn(data_dependency):
 
 		table_name = ".".join(parts[1::])
 
-	elif data_dependency.datasource == "redshift":
+	elif data_dependency.source == "Redshift":
 		platform = "redshift"
 		table_name = data_dependency.table
 
 	else:
-		raise Exception(f"Unknown datasource: {data_dependency.datasource}")
+		raise Exception(f"Unknown source: {data_dependency.source}")
 		
 	return f"urn:li:dataset:(urn:li:dataPlatform:{platform},{table_name},PROD)"
 
@@ -112,7 +122,7 @@ def build_dataset_mce(pipegen_spec):
     	},
     	"dataset": construct_datalineage_urn(dep),
     	"type":"TRANSFORMED"
-    } for dep in pipegen_spec.data_dependencies]
+    } for dep in pipegen_spec.all_data_dependencies()]
 
     return {
         "auditHeader": None,
@@ -156,6 +166,7 @@ def main():
 
 		print(pipegen_spec)
 		print(mce)
+		print("---")
 
 		kafka_producer.produce(topic=KAFKA_TOPIC, key=mce['proposedSnapshot'][1]['urn'], value=mce)
 		kafka_producer.flush()

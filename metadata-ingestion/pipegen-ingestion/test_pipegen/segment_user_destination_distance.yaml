@@ -4,10 +4,10 @@ Description: |
   This pipeline calculates the distance between a user's location and the map center at the max timestamp of each session
 TargetTableName: pg_segment_user_destination_distance
 DataDependencies:
-- {"datasource": "presto", "table": "hive_emr.pipegen.pg_segment_tracks"}
-- {"datasource": "presto", "table": "hive.segment.tracks"}
-- {"datasource": "presto", "table": "hive.segment_processed.user_location_neighborhoods"}
-- {"datasource": "presto", "table": "hive.segment_processed.search_event_neighborhoods"}
+- {"Source": "Presto", "Name": "hive_emr.pipegen.pg_segment_tracks"}
+- {"Source": "Presto", "Name": "hive.segment.tracks"}
+- {"Source": "Presto", "Name": "hive.segment_processed.user_location_neighborhoods"}
+- {"Source": "Presto", "Name": "hive.segment_processed.search_event_neighborhoods"}
 Query:  |
   WITH max_distance as 
   (

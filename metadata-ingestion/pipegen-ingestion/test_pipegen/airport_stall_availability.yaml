@@ -3,20 +3,20 @@ Name: airport_stall_availability
 Description: This is a pipeline to get airport stall availability
 TargetTableName: pg_airport_stall_availability
 DataDependencies:
-  - datasource: redshift
-    table: sh_public.spothero_inventoryavailabilitystatus
-  - datasource: redshift
-    table: sfdc.reporting_neighborhood_c
-  - datasource: redshift
-    table: sfdc.opportunity
-  - datasource: redshift
-    table: sh_public.spothero_city
-  - datasource: redshift
-    table: sfdc.market_c
-  - datasource: redshift
-    table: sfdc.reporting_city_c
-  - datasource: redshift 
-    table: sh_public.parking_spot
+  - Source: Redshift
+    Name: sh_public.spothero_inventoryavailabilitystatus
+  - Source: Redshift
+    Name: sfdc.reporting_neighborhood_c
+  - Source: Redshift
+    Name: sfdc.opportunity
+  - Source: Redshift
+    Name: sh_public.spothero_city
+  - Source: Redshift
+    Name: sfdc.market_c
+  - Source: Redshift
+    Name: sfdc.reporting_city_c
+  - Source: Redshift 
+    Name: sh_public.parking_spot
 Query:  |
   with z as (
           with y as (
