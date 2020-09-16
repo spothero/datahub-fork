@@ -31,17 +31,85 @@ class Dependency:
 	source: str 
 	table: str
 
+	def get_platform_and_table(self):
+		raise NotImplementedError("Subclass of Dependency must override get_platform_and_table")
+
+	def construct_datalineage_urn(self):
+		platform, table_name = self.get_platform_and_table()
+		return f"urn:li:dataset:(urn:li:dataPlatform:{platform},{table_name},PROD)"
+
+
+class DataDependency(Dependency):
+	def get_platform_and_table(self):
+		"""
+		Data dependencies use fully qualified table names like:
+		Presto -> hive.segment.tracks
+		Redshift -> sh_public.rental
+		"""
+		if self.source == "Presto":
+			parts = self.table.split(".")
+			catalog = parts[0]
+
+			if catalog == "hive":
+				platform = "presto_glue"
+			elif catalog == "hive_emr":
+				platform = "presto_hive"
+			else:
+				raise Exception(f"Unknown catalog: {catalog} for data_dependency: {self.table}")
+
+			table_name = ".".join(parts[1::])
+
+			return platform, table_name
+
+		elif self.source == "Redshift":
+			platform = "redshift"
+			table_name = self.table
+
+			return platform, table_name
+
+		else:
+			raise Exception(f"Unknown source: {self.source}")
+
+
+class SchedulingDependency(Dependency):
+	def get_platform_and_table(self):
+		"""
+		Scheduling dependencies do *not* use fully qualified table names
+		This is because scheduling dependencies can only occur on other pipegen jobs
+		Since they are pipegen jobs, we know more information about their fully qualified names like:
+		Presto -> must be hive_emr.pipegen.{table_name}, so we just use {table_name}
+		Redshift -> must be pipegen.{table_name}, so we just use {table_name}
+		"""
+		if "." in self.table:
+			raise Exception(f"{self.table} is a scheduling dependency and should not contain catalog/schema information")
+		
+		if self.source == "Presto":
+			platform = "presto_hive"
+			table_name = f"pipegen.{self.table}"
+
+			return platform, table_name
+
+		elif self.source == "Redshift":
+			platform = "redshift"
+			table_name = f"pipegen.{self.table}"
+
+			return platform, table_name
+
+		else:
+			raise Exception(f"Unknown source: {self.source}")
+
+
 @dataclass
 class PipegenSpec:
 	name: str
 	description: str 
 	target_table_name: str
-	data_dependencies:  typing.List[Dependency]
-	scheduling_dependencies: typing.List[Dependency]
+	data_dependencies:  typing.List[DataDependency]
+	scheduling_dependencies: typing.List[SchedulingDependency]
 	source: str
 	enabled_for_scheduling: bool
 
-	def all_data_dependencies(self):
+	def all_data_dependencies(self) -> typing.List[Dependency]:
 		return set(self.data_dependencies).union(
 			set(self.scheduling_dependencies)
 		)
@@ -55,8 +123,8 @@ def file_contents_to_pipegen_spec(file_obj):
 	data_dependencies = file_obj.get("DataDependencies", [])
 	scheduling_dependencies = file_obj.get("SchedulingDependencies", [])
 
-	mapped_data_dependencies = [ Dependency(d["Source"], d["Name"]) for d in data_dependencies]
-	mapped_scheduling_dependencies = [ Dependency(d["Source"], f"pipegen.{d['Name']}") for d in scheduling_dependencies]
+	mapped_data_dependencies = [ DataDependency(d["Source"], d["Name"]) for d in data_dependencies]
+	mapped_scheduling_dependencies = [ SchedulingDependency(d["Source"], d["Name"]) for d in scheduling_dependencies]
 
 	return PipegenSpec(
 		name = file_obj["Name"],
@@ -86,29 +154,6 @@ def construct_data_urn(pipegen_spec):
 	return f"urn:li:dataset:(urn:li:dataPlatform:{platform},{table_name},PROD)"
 
 
-def construct_datalineage_urn(data_dependency):
-	if data_dependency.source == "Presto":
-		parts = data_dependency.table.split(".")
-		catalog = parts[0]
-
-		if catalog == "hive":
-			platform = "presto_glue"
-		elif catalog == "hive_emr":
-			platform = "presto_hive"
-		else:
-			raise Exception(f"Unknown catalog: {catalog} for data_dependency: {data_dependency.table}")
-
-		table_name = ".".join(parts[1::])
-
-	elif data_dependency.source == "Redshift":
-		platform = "redshift"
-		table_name = data_dependency.table
-
-	else:
-		raise Exception(f"Unknown source: {data_dependency.source}")
-		
-	return f"urn:li:dataset:(urn:li:dataPlatform:{platform},{table_name},PROD)"
-
 def build_dataset_mce(pipegen_spec):
     """
     Creates MetadataChangeEvent for the dataset, creating upstream lineage links
@@ -120,7 +165,7 @@ def build_dataset_mce(pipegen_spec):
     		"time": sys_time,
     		"actor":actor
     	},
-    	"dataset": construct_datalineage_urn(dep),
+    	"dataset": dep.construct_datalineage_urn(),
     	"type":"TRANSFORMED"
     } for dep in pipegen_spec.all_data_dependencies()]
 
@@ -159,8 +204,9 @@ def make_kafka_producer(extra_kafka_conf):
 
 def main():
 	kafka_producer = make_kafka_producer(EXTRA_KAFKA_CONF)
-	files = [f for f in glob.glob(f"{PIPEGEN_DIRECTORY}/*.yaml")]
+	files = sorted(f for f in glob.glob(f"{PIPEGEN_DIRECTORY}/*.yaml"))
 	for fn in files:
+		print(f"Processing filename: {fn}")
 		pipegen_spec = file_to_pipegen_spec(fn)
 		mce = build_dataset_mce(pipegen_spec)
 
