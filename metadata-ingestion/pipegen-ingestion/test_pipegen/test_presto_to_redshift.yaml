@@ -1,0 +1,17 @@
+---
+Name: pg_sh4blist
+Description: |
+  A fake pipegen job to test PrestoToRedshift functionality
+TargetTableName: pg_sh4blist
+DataDependencies:
+- {"Source": "Presto", "Name": "hive.segment.tracks"}
+- {"Source": "Redshift", "Name": "sh_public.rental"}
+Query:  |
+  select r.*, t.*
+  from redshift.sh_public.rental as r
+  inner join hive.segment.tracks as t 
+  on r.rental_id = t.rental_id
+  limit 20
+Frequency: '0 2 * * *'
+Source: PrestoToRedshift
+Email: grant@spothero.com
