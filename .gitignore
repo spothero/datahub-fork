@@ -25,6 +25,7 @@ venv.bak/
 .dmypy.json
 dmypy.json
 MANIFEST
+.python-version
 
 # Added by mp-maker
 **/build
