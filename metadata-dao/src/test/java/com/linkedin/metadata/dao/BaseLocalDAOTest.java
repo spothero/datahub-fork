@@ -1,7 +1,6 @@
 package com.linkedin.metadata.dao;
 
 import com.linkedin.common.AuditStamp;
-import com.linkedin.common.urn.Urn;
 import com.linkedin.data.template.RecordTemplate;
 import com.linkedin.metadata.dao.producer.BaseMetadataEventProducer;
 import com.linkedin.metadata.dao.retention.TimeBasedRetention;
@@ -13,6 +12,7 @@ import com.linkedin.testing.EntityAspectUnion;
 import com.linkedin.testing.urn.FooUrn;
 import java.net.URISyntaxException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,7 +26,7 @@ import org.mockito.stubbing.OngoingStubbing;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import static com.linkedin.metadata.utils.TestUtils.*;
+import static com.linkedin.metadata.utils.AuditStamps.*;
 import static org.mockito.Mockito.*;
 import static org.testng.Assert.*;
 
@@ -50,7 +50,7 @@ public class BaseLocalDAOTest {
     }
 
     @Override
-    protected <ASPECT extends RecordTemplate> void saveToLocalSecondaryIndex(@Nonnull FooUrn urn,
+    protected <ASPECT extends RecordTemplate> void updateLocalIndex(@Nonnull FooUrn urn,
         @Nullable ASPECT newValue, long version) {
 
     }
@@ -94,13 +94,13 @@ public class BaseLocalDAOTest {
     }
 
     @Override
-    public <ASPECT extends RecordTemplate> ListResult<Urn> listUrns(Class<ASPECT> aspectClass, int start,
+    public <ASPECT extends RecordTemplate> ListResult<FooUrn> listUrns(Class<ASPECT> aspectClass, int start,
         int pageSize) {
       return null;
     }
 
     @Override
-    public ListResult<Urn> listUrns(@Nonnull IndexFilter indexFilter, @Nullable FooUrn lastUrn, int pageSize) {
+    public ListResult<FooUrn> listUrns(@Nonnull IndexFilter indexFilter, @Nullable FooUrn lastUrn, int pageSize) {
       return null;
     }
 
@@ -127,9 +127,17 @@ public class BaseLocalDAOTest {
     }
 
     @Override
+    @Nonnull
     public Map<AspectKey<FooUrn, ? extends RecordTemplate>, Optional<? extends RecordTemplate>> get(
         Set<AspectKey<FooUrn, ? extends RecordTemplate>> aspectKeys) {
-      return null;
+      return Collections.emptyMap();
+    }
+
+    @Override
+    @Nonnull
+    public Map<AspectKey<FooUrn, ? extends RecordTemplate>, AspectWithExtraInfo<? extends RecordTemplate>> getWithExtraInfo(
+        @Nonnull Set<AspectKey<FooUrn, ? extends RecordTemplate>> keys) {
+      return Collections.emptyMap();
     }
   }
 

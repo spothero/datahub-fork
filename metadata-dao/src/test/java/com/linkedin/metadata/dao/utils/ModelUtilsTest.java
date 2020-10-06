@@ -1,9 +1,10 @@
 package com.linkedin.metadata.dao.utils;
 
 import com.google.common.collect.ImmutableSet;
-import com.linkedin.common.Ownership;
+import com.linkedin.common.CommonTestAspect;
 import com.linkedin.common.urn.Urn;
 import com.linkedin.testing.EntityFoo;
+import com.linkedin.testing.EntityUnion;
 import com.linkedin.testing.urn.BarUrn;
 import com.linkedin.data.template.RecordTemplate;
 import com.linkedin.metadata.validator.InvalidSchemaException;
@@ -280,7 +281,15 @@ public class ModelUtilsTest {
     boolean result = ModelUtils.isCommonAspect(AspectFoo.class);
     assertFalse(result);
 
-    result = ModelUtils.isCommonAspect(Ownership.class);
+    result = ModelUtils.isCommonAspect(CommonTestAspect.class);
     assertTrue(result);
+  }
+
+  @Test
+  public void testNewEntityUnion() {
+    EntityFoo entityFoo = new EntityFoo().setUrn(makeFooUrn(1));
+    EntityUnion entityUnion = ModelUtils.newEntityUnion(EntityUnion.class, entityFoo);
+
+    assertEquals(entityUnion.getEntityFoo(), entityFoo);
   }
 }
