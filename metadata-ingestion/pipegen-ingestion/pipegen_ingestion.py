@@ -1,5 +1,6 @@
 #! /usr/bin/python
 import time
+import os
 import glob
 import typing 
 import yaml
@@ -14,7 +15,7 @@ from confluent_kafka.avro import AvroProducer
 AVSC_PATH = "../../metadata-events/mxe-schemas/src/renamed/avro/com/linkedin/mxe/MetadataChangeEvent.avsc"
 KAFKA_TOPIC = 'MetadataChangeEvent_v4'
 
-PIPEGEN_DIRECTORY = "./test_pipegen"
+PIPEGEN_DIRECTORY = "/Users/grant.nicholas/git/data-pipeline-definitions"
 
 EXTRA_KAFKA_CONF = {
   'bootstrap.servers': 'localhost:9092',
@@ -101,6 +102,7 @@ class SchedulingDependency(Dependency):
 
 @dataclass
 class PipegenSpec:
+	file_name: str
 	name: str
 	description: str 
 	target_table_name: str
@@ -108,6 +110,7 @@ class PipegenSpec:
 	scheduling_dependencies: typing.List[SchedulingDependency]
 	source: str
 	enabled_for_scheduling: bool
+	email: str
 
 	def all_data_dependencies(self) -> typing.List[Dependency]:
 		return set(self.data_dependencies).union(
@@ -115,11 +118,12 @@ class PipegenSpec:
 		)
 
 
-def file_to_pipegen_spec(file_name):
-	with open(file_name, "r") as f: 
-		return file_contents_to_pipegen_spec(yaml.safe_load(f))
+def file_to_pipegen_spec(file_path):
+	file_name = os.path.basename(file_path)
+	with open(file_path, "r") as f: 
+		return file_contents_to_pipegen_spec(file_name, yaml.safe_load(f))
 
-def file_contents_to_pipegen_spec(file_obj):
+def file_contents_to_pipegen_spec(file_name, file_obj):
 	data_dependencies = file_obj.get("DataDependencies", [])
 	scheduling_dependencies = file_obj.get("SchedulingDependencies", [])
 
@@ -127,13 +131,15 @@ def file_contents_to_pipegen_spec(file_obj):
 	mapped_scheduling_dependencies = [ SchedulingDependency(d["Source"], d["Name"]) for d in scheduling_dependencies]
 
 	return PipegenSpec(
+		file_name = file_name,
 		name = file_obj["Name"],
 		description = file_obj["Description"],
 		target_table_name = file_obj["TargetTableName"],
 		data_dependencies = mapped_data_dependencies,
 		scheduling_dependencies = mapped_scheduling_dependencies,
 		source = file_obj["Source"],
-		enabled_for_scheduling = file_obj.get("EnabledForScheduling", True)
+		enabled_for_scheduling = file_obj.get("EnabledForScheduling", True),
+		email = file_obj["Email"]
 	)
 
 
@@ -158,23 +164,45 @@ def build_dataset_mce(pipegen_spec):
     """
     Creates MetadataChangeEvent for the dataset, creating upstream lineage links
     """
-    actor, sys_time = "urn:li:corpuser:etl", int(time.time())
+    actor, sys_time = "urn:li:corpuser:etl", int(time.time()) * 1000
 
     upstreams = [{
     	"auditStamp":{
     		"time": sys_time,
-    		"actor":actor
+    		"actor": actor
     	},
     	"dataset": dep.construct_datalineage_urn(),
     	"type":"TRANSFORMED"
     } for dep in pipegen_spec.all_data_dependencies()]
+
+    doc_elements = [{
+    	"url":f"https://github.com/spothero/data-pipeline-definitions/blob/master/{pipegen_spec.file_name}",
+    	"description":"Github pipegen definition",
+    	"createStamp":{
+    		"time": sys_time,
+    		"actor": actor
+    	}
+    }]
+
+    owners = [{
+    	"owner": f"urn:li:corpuser:{pipegen_spec.email}",
+    	"type": "DEVELOPER"
+    }]
 
     return {
         "auditHeader": None,
         "proposedSnapshot":("com.linkedin.pegasus2avro.metadata.snapshot.DatasetSnapshot", {
             "urn": construct_data_urn(pipegen_spec),
             "aspects": [
-            	("com.linkedin.pegasus2avro.dataset.UpstreamLineage", {"upstreams": upstreams})
+            	("com.linkedin.pegasus2avro.dataset.UpstreamLineage", {"upstreams": upstreams}),
+            	("com.linkedin.pegasus2avro.common.InstitutionalMemory", {"elements": doc_elements}),
+            	("com.linkedin.pegasus2avro.common.Ownership", {
+            		"owners": owners,
+            		"lastModified":{
+            			"time": sys_time,
+            			"actor": actor
+            		}
+            	}),
             ]
         }),
         "proposedDelta": None
