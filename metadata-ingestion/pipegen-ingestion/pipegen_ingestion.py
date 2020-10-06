@@ -15,7 +15,7 @@ from confluent_kafka.avro import AvroProducer
 AVSC_PATH = "../../metadata-events/mxe-schemas/src/renamed/avro/com/linkedin/mxe/MetadataChangeEvent.avsc"
 KAFKA_TOPIC = 'MetadataChangeEvent_v4'
 
-PIPEGEN_DIRECTORY = "/Users/grant.nicholas/git/data-pipeline-definitions"
+PIPEGEN_DIRECTORY = "./test_pipegen"
 
 EXTRA_KAFKA_CONF = {
   'bootstrap.servers': 'localhost:9092',
