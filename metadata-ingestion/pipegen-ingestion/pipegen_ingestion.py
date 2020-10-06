@@ -203,6 +203,7 @@ def build_dataset_mce(pipegen_spec):
             			"actor": actor
             		}
             	}),
+            	("com.linkedin.pegasus2avro.dataset.DatasetProperties", {"description": pipegen_spec.description, "customProperties": {}})
             ]
         }),
         "proposedDelta": None
