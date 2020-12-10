@@ -2,7 +2,7 @@
 import time
 import os
 import glob
-import typing 
+import typing
 import yaml
 
 
@@ -19,7 +19,7 @@ PIPEGEN_DIRECTORY = "./test_pipegen"
 
 EXTRA_KAFKA_CONF = {
   'bootstrap.servers': 'localhost:9092',
-  'schema.registry.url': 'http://localhost:8081'
+  'schema.registry.url': 'http://localhost:8081',
   # 'security.protocol': 'SSL',
   # 'ssl.ca.location': '/Users/grant.nicholas/.kafka/data_stg/ca.pem',
   # 'ssl.key.location': '/Users/grant.nicholas/.kafka/data_stg/service.key',
@@ -29,7 +29,7 @@ EXTRA_KAFKA_CONF = {
 
 @dataclass(frozen=True)
 class Dependency:
-	source: str 
+	source: str
 	table: str
 
 	def get_platform_and_table(self):
@@ -52,9 +52,9 @@ class DataDependency(Dependency):
 			catalog = parts[0]
 
 			if catalog == "hive":
-				platform = "presto_glue"
+				platform = "hive"
 			elif catalog == "hive_emr":
-				platform = "presto_hive"
+				platform = "hive_emr"
 			else:
 				raise Exception(f"Unknown catalog: {catalog} for data_dependency: {self.table}")
 
@@ -83,9 +83,9 @@ class SchedulingDependency(Dependency):
 		"""
 		if "." in self.table:
 			raise Exception(f"{self.table} is a scheduling dependency and should not contain catalog/schema information")
-		
+
 		if self.source == "Presto":
-			platform = "presto_hive"
+			platform = "hive_emr"
 			table_name = f"pipegen.{self.table}"
 
 			return platform, table_name
@@ -104,7 +104,7 @@ class SchedulingDependency(Dependency):
 class PipegenSpec:
 	file_name: str
 	name: str
-	description: str 
+	description: str
 	target_table_name: str
 	data_dependencies:  typing.List[DataDependency]
 	scheduling_dependencies: typing.List[SchedulingDependency]
@@ -120,7 +120,7 @@ class PipegenSpec:
 
 def file_to_pipegen_spec(file_path):
 	file_name = os.path.basename(file_path)
-	with open(file_path, "r") as f: 
+	with open(file_path, "r") as f:
 		return file_contents_to_pipegen_spec(file_name, yaml.safe_load(f))
 
 def file_contents_to_pipegen_spec(file_name, file_obj):
@@ -146,15 +146,15 @@ def file_contents_to_pipegen_spec(file_name, file_obj):
 def construct_data_urn(pipegen_spec):
 	if pipegen_spec.source == "Presto":
 		# pipegen stores metadata in hive_emr not glue
-		platform = "presto_hive"
+		platform = "hive_emr"
 		table_name = f"pipegen.{pipegen_spec.target_table_name}"
 
 	elif pipegen_spec.source in ("Redshift", "PrestoToRedshift"):
 		platform = "redshift"
-		table_name = f"pipegen.{pipegen_spec.target_table_name}"		
+		table_name = f"pipegen.{pipegen_spec.target_table_name}"
 
 	else:
-		raise Exception(f"Unknown source: {pipegen_spec.source}")		
+		raise Exception(f"Unknown source: {pipegen_spec.source}")
 
 
 	return f"urn:li:dataset:(urn:li:dataPlatform:{platform},{table_name},PROD)"
